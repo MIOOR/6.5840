@@ -1,6 +1,6 @@
 package main
-
-//
+// package mrapps
+// 伪应用
 // a MapReduce pseudo-application that sometimes crashes,
 // and sometimes takes a long time,
 // to test MapReduce's ability to recover.
@@ -8,14 +8,17 @@ package main
 // go build -buildmode=plugin crash.go
 //
 
-import "6.5840/mr"
-import crand "crypto/rand"
-import "math/big"
-import "strings"
-import "os"
-import "sort"
-import "strconv"
-import "time"
+import (
+	crand "crypto/rand"
+	"math/big"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"6.5840/mr"
+)
 
 func maybeCrash() {
 	max := big.NewInt(1000)

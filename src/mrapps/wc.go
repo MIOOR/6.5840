@@ -6,10 +6,13 @@ package main
 // go build -buildmode=plugin wc.go
 //
 
-import "6.5840/mr"
-import "unicode"
-import "strings"
-import "strconv"
+import (
+	"strconv"
+	"strings"
+	"unicode"
+
+	"6.5840/mr"
+)
 
 // The map function is called once for each file of input. The first
 // argument is the name of the input file, and the second is the
@@ -21,6 +24,7 @@ func Map(filename string, contents string) []mr.KeyValue {
 	ff := func(r rune) bool { return !unicode.IsLetter(r) }
 
 	// split contents into an array of words.
+	// 满足ff来拆分字符串, 返回切片
 	words := strings.FieldsFunc(contents, ff)
 
 	kva := []mr.KeyValue{}

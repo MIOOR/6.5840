@@ -26,7 +26,7 @@ then
 else
   if gtimeout 2s sleep 1 > /dev/null 2>&1
   then
-    TIMEOUT=gtimeout
+    TIMEOUT=gtimeout.
   else
     # no timeout command
     TIMEOUT=

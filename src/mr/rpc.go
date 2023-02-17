@@ -7,7 +7,6 @@ package mr
 //
 
 import (
-	// "context"
 	"os"
 	"strconv"
 )
@@ -27,67 +26,29 @@ type ExampleReply struct {
 
 // Add your RPC definitions here.
 
-// Imitation enumeration
-// enumeration of state of Args
-var STATE_OF_ARGS = StateOfArgs{}
+type TaskType int
 
-type StateOfArgs struct {
+const (
+	TaskTypeNone TaskType = iota
+	TaskTypeMap
+	TaskTypeReduce 
+	TaskTypeSleep
+	TaskTypeExit
+)
+
+// finished task
+type TaskArgs struct {
+	DoneType TaskType
+	Id       int
+	Files    []string
 }
 
-func (s *StateOfArgs) RequestTask() string {
-	return "RequestTask"
-}
-
-func (s *StateOfArgs) Finished() string {
-	return "Finished"
-}
-
-// enumeration of taskType of Args
-var TASK_TYPE = TaskType{}
-
-type TaskType struct {
-}
-
-func (t *TaskType) Map() string {
-	return "Map"
-}
-
-func (t *TaskType) Reduce() string {
-	return "Reduce"
-}
-
-func (t *TaskType) Wait() string {
-	return "Wait"
-}
-
-func (t *TaskType) Done() string {
-	return "Done"
-}
-
-// request
-type Args struct {
-	State string
-	Tsk   Task
-}
-
-// enumeration of state of Reply
-var STATE_OF_REPLY = StateOfReply{}
-
-type StateOfReply struct {
-}
-
-func (s *StateOfReply) TaskInfo() string {
-	return "TaskInfo"
-}
-
-func (s *StateOfReply) Received() string {
-	return "Received"
-}
-
-// reply
-type Reply struct {
-	State string
-	Tsk   Task
+// new task
+type TaskReply struct {
+	Type    TaskType
+	Id      int
+	Files   []string
+	NReduce int
 }
 
 // Cook up a unique-ish UNIX-domain socket name
@@ -96,6 +57,7 @@ type Reply struct {
 // Athena AFS doesn't support UNIX-domain sockets.
 func coordinatorSock() string {
 	s := "/var/tmp/5840-mr-"
+	// 强制类型转换 获取当前进程的实际用户 ID 
 	s += strconv.Itoa(os.Getuid())
 	return s
 }

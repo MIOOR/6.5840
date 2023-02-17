@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+rm mr-[0-9]* -f
+rm mr-out* -f
+clear
+go build -buildmode=plugin ../mrapps/wc.go
+go run mrcoordinator.go pg*.txt
+
+
