@@ -18,8 +18,8 @@ import (
 )
 
 func main() {
-	fmt.Println("========================================================")
-	fmt.Println("                        Start")
+	// fmt.Println("========================================================")
+	// fmt.Println("                        Start")
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: mrcoordinator inputfiles...\n")
 		os.Exit(1)
@@ -31,4 +31,5 @@ func main() {
 	}
 
 	time.Sleep(time.Second)
+	// fmt.Println("mrcoordinator.go")
 }
