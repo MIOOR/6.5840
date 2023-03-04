@@ -35,61 +35,80 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// Your worker implementation here.
 	// get and process task from coordinator
-	task := MyCall(Args{State: STATE_OF_ARGS.RequestTask()})
-	for task.TskType != TASK_TYPE.Done() {
-		switch task.TskType {
-		case TASK_TYPE.Map():
+
+	for re := MyCall(Args{TskType: TASK_TYPE_OF_NONE}); re.TskType != TASK_TYPE_OF_NONE; {
+		args := Args{}
+		switch re.TskType {
+		case TASK_TYPE_OF_MAP:
+			filename := re.Files[0]
 			// open file
-			file, err := os.Open(task.InputFile)
+			file, err := os.Open(filename)
 			if err != nil {
-				log.Fatalf("cannot open %v", task.InputFile)
+				log.Fatalf("cannot open %v", filename)
 			}
 			content, err := ioutil.ReadAll(file)
 			if err != nil {
-				log.Fatalf("cannot read %v", task.InputFile)
+				log.Fatalf("cannot read %v", filename)
 			}
 			file.Close()
 
 			// run mapf
-			kva := mapf(task.InputFile, string(content))
+			kva := mapf(filename, string(content))
 
-			// store kvs in an intermediate file
-			fileOfIntermediate, err := os.Create(task.OutputFile)
-			if err != nil {
-				log.Fatalf("cannot creat %v", fileOfIntermediate)
-			}
-
-			enc := json.NewEncoder(fileOfIntermediate)
+			// store kvs in intermediate Files
+			intermediates := make(map[int][]KeyValue)
+			var reduceID int
 			for _, kv := range kva {
-				err = enc.Encode(&kv)
+				reduceID = ihash(kv.Key) % re.NReduce
+				intermediates[reduceID] = append(intermediates[reduceID], kv)
 			}
-			fileOfIntermediate.Close()
 
-		case TASK_TYPE.Reduce():
-			ofile, _ := os.Create(task.OutputFile)
+			args.Files = make([]string, re.NReduce)
+			var outputFile string
+			for reduceID, kva := range intermediates {
+				outputFile = fmt.Sprintf("mr-%d-%d.txt", re.ID, reduceID)
+				args.Files[reduceID] = outputFile
+				fileOfIntermediate, err := os.Create(outputFile)
+				if err != nil {
+					log.Fatalf("cannot creat %v", fileOfIntermediate)
+				}
+
+				enc := json.NewEncoder(fileOfIntermediate)
+				for _, kv := range kva {
+					err = enc.Encode(&kv)
+				}
+				fileOfIntermediate.Close()
+			}
+			// fmt.Printf("Map: %v\n", args.Files)
+		case TASK_TYPE_OF_REDUCE:
+			outputfile := fmt.Sprintf("mr-out-%d.txt", re.ID)
+			args.Files = append(args.Files, outputfile)
+			ofile, _ := os.Create(outputfile)
 
 			//
 			// call Reduce on each distinct key in intermediate[],
 			// and print the result to mr-out-0.
 			//
 
-			// open file
-			file, err := os.Open(task.InputFile)
-			if err != nil {
-				log.Fatalf("cannot open %v", task.InputFile)
-			}
-
-			// get intermediate kvs from file
+			// get all intermediate
 			var intermediate []KeyValue
-			dec := json.NewDecoder(file)
-			for {
-				var kv KeyValue
-				if err := dec.Decode(&kv); err != nil {
-					break
+			for _, file := range re.Files {
+				file, err := os.Open(file)
+				if err != nil {
+					log.Fatalf("cannot open %v", file)
 				}
-				intermediate = append(intermediate, kv)
+
+				// get intermediate kvs from file
+				dec := json.NewDecoder(file)
+				for {
+					var kv KeyValue
+					if err := dec.Decode(&kv); err != nil {
+						break
+					}
+					intermediate = append(intermediate, kv)
+				}
+				file.Close()
 			}
-			file.Close()
 			// sort intermediate kvs by key
 			sort.Sort(ByKey(intermediate))
 			// run reduce task
@@ -113,14 +132,19 @@ func Worker(mapf func(string, string) []KeyValue,
 
 			ofile.Close()
 
-		case TASK_TYPE.Wait():
+		case TASK_TYPE_OF_WAIT:
 			// wait for a second before get a task
 			time.Sleep(time.Second)
-		case TASK_TYPE.Done():
+		case TASK_TYPE_OF_NONE:
 			// all tasks are Finished
 		}
-		time.Sleep(time.Second * 2)
-		task = MyCall(Args{State: STATE_OF_ARGS.Finished(), Tsk: task})
+		// time.Sleep(time.Second * 2)
+
+		// fill args
+		args.ID = re.ID
+		args.TskType = re.TskType
+		fmt.Printf("args files: %v\n", args.Files)
+		re = MyCall(args)
 	}
 
 	// ----- endline of write code-----
@@ -162,18 +186,14 @@ func CallExample() {
 	if ok {
 		// reply.Y should be 100.
 		fmt.Printf("reply.Y %v\n", reply.Y)
+		// fmt.Printf("reply: %v\n", reply)
 	} else {
 		fmt.Printf("call failed!\n")
 	}
 }
 
 // My implementation of RPC call
-// request: first must be "RequestTask" or "Finished"( call STATE_OF_ARGS.xxx() )
-// only type string below if the first parameter is "Finished"
-// second type is "Map" or "Reduce"( call TASK_TYPE.xxx() )
-// third type is a file name which have done
-// only return value if taskState is "Request" else return nil
-func MyCall(args Args) (t Task) {
+func MyCall(args Args) Reply {
 
 	// declare a reply structure.
 	reply := Reply{}
@@ -184,20 +204,13 @@ func MyCall(args Args) (t Task) {
 	// the "Coordinator.Example" tells the
 	// receiving server that we'd like to call
 	// the Example() method of struct Coordinator.
-	if call("Coordinator.MyRPCHandler", &args, &reply) {
-		switch reply.State {
-		case STATE_OF_REPLY.TaskInfo():
-			t = reply.Tsk
-		case STATE_OF_REPLY.Received():
-			// means all task has done
-		}
-	} else {
+	if !call("Coordinator.MyRPCHandler", &args, &reply) {
 		fmt.Println("Call failed!")
 	}
 
-	// fmt.Printf("AfterCall\nreply: %v\n\n", reply)
+	// fmt.Printf("AfterCall\nreply: %v\n", reply)
 
-	return
+	return reply
 }
 
 // send an RPC request to the coordinator, wait for the response.
@@ -213,10 +226,10 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	defer c.Close()
 
 	err = c.Call(rpcname, args, reply)
+
 	if err == nil {
 		return true
 	}
-
 	fmt.Println(err)
 	return false
 }

@@ -27,67 +27,32 @@ type ExampleReply struct {
 
 // Add your RPC definitions here.
 
-// Imitation enumeration
-// enumeration of state of Args
-var STATE_OF_ARGS = StateOfArgs{}
+type TaskType int
 
-type StateOfArgs struct {
-}
-
-func (s *StateOfArgs) RequestTask() string {
-	return "RequestTask"
-}
-
-func (s *StateOfArgs) Finished() string {
-	return "Finished"
-}
-
-// enumeration of taskType of Args
-var TASK_TYPE = TaskType{}
-
-type TaskType struct {
-}
-
-func (t *TaskType) Map() string {
-	return "Map"
-}
-
-func (t *TaskType) Reduce() string {
-	return "Reduce"
-}
-
-func (t *TaskType) Wait() string {
-	return "Wait"
-}
-
-func (t *TaskType) Done() string {
-	return "Done"
-}
+const (
+	TASK_TYPE_OF_NONE = iota
+	TASK_TYPE_OF_MAP
+	TASK_TYPE_OF_REDUCE
+	TASK_TYPE_OF_WAIT
+)
 
 // request
 type Args struct {
-	State string
-	Tsk   Task
-}
-
-// enumeration of state of Reply
-var STATE_OF_REPLY = StateOfReply{}
-
-type StateOfReply struct {
-}
-
-func (s *StateOfReply) TaskInfo() string {
-	return "TaskInfo"
-}
-
-func (s *StateOfReply) Received() string {
-	return "Received"
+	// TskType string
+	// index   int
+	TskType TaskType
+	Files   []string
+	ID      int
 }
 
 // reply
 type Reply struct {
-	State string
-	Tsk   Task
+	// TskType string
+	TskType TaskType
+	// index   int
+	ID      int
+	Files   []string
+	NReduce int
 }
 
 // Cook up a unique-ish UNIX-domain socket name

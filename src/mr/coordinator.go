@@ -1,171 +1,231 @@
 package mr
 
 import (
-	"fmt"
 	// "internal/itoa"
+	// "fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
-	"strconv"
+	// "strconv"
+	"sync"
+	"time"
 	// "golang.org/x/text/cases"
 )
 
 type Coordinator struct {
 	// Your definitions here.
-	mapTasks                                  Tasks
-	reduceTasks                               Tasks
+	mutex                                     sync.Mutex
+	mapTasks                                  []MapTask
+	reduceTasks                               []ReduceTask
 	unfinishedMapTasks, unfinishedReduceTasks int
-	// wokersState     map[string][]WokerState
+	maxTimeOfTask                             time.Duration
 }
 
-// return a task and modifies it to be Running if it exists else return empty task
-func (c *Coordinator) Get(TskType string) (task Task) {
-	// give a task and changes it to Running if it exists
-	switch TskType {
-	case TASK_TYPE.Map():
-		task = c.mapTasks.Find(TASK_STATE.Pending())
-		c.mapTasks.ModifyState(TASK_STATE.Running(), task.Index)
-	case TASK_TYPE.Reduce():
-		task = c.reduceTasks.Find(TASK_STATE.Pending())
-		c.reduceTasks.ModifyState(TASK_STATE.Running(), task.Index)
-	}
+func (c *Coordinator) getMapTask() (mt MapTask, tskType TaskType) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	// give status to a empty task
-	if task.TskType == "" {
-		if c.unfinishedReduceTasks > 0 {
-			// Reduce task is unstarted
-			task.TskType = TASK_TYPE.Wait()
-		} else {
-			// all tasks are finished
-			task.TskType = TASK_TYPE.Done()
-		}
-	}
-	return
-}
+	// Reset timeout tasks
+	c.resetTasksOfTimeout(TASK_TYPE_OF_MAP)
 
-// // return true if the task status is modified successfully else return false
-// func (c *Coordinator) modifyState(state string, t Task) (result bool) {
-// 	switch t.TskType {
-// 	case TASK_TYPE.Map():
-// 		result = c.mapTasks.modifyState(state, t.Index)
-// 	case TASK_TYPE.Reduce():
-// 		result = c.reduceTasks.modifyState(state, t.Index)
-// 	default:
-// 		result = false
-// 	}
-// 	return
-// }
-
-// mark the task status as finished
-func (c *Coordinator) Finished(t Task) {
-	switch t.TskType {
-	case TASK_TYPE.Map():
-		c.mapTasks.ModifyState(TASK_STATE.Finished(), t.Index)
-		c.unfinishedMapTasks--
-	case TASK_TYPE.Reduce():
-		c.reduceTasks.ModifyState(TASK_STATE.Finished(), t.Index)
-		c.unfinishedReduceTasks--
-	}
-}
-
-type Task struct {
-	Index      int
-	ID         string
-	TskType    string
-	State      string
-	InputFile  string
-	OutputFile string
-}
-
-// enumeration of state of task
-var TASK_STATE = TaskState{}
-
-type TaskState struct {
-}
-
-func (ts *TaskState) Pending() string {
-	return "Pending"
-}
-
-func (ts *TaskState) Running() string {
-	return "Running"
-}
-
-func (ts *TaskState) Finished() string {
-	return "Finished"
-}
-
-type WokerState struct {
-}
-
-type Tasks struct {
-	Tasks []Task
-}
-
-// append a new task to the Tasks array
-func (ts *Tasks) Append(t Task) {
-	ts.Tasks = append(ts.Tasks, t)
-}
-
-// change the state of the task
-func (ts *Tasks) ModifyState(state string, Index int) (result bool) {
-	if len(ts.Tasks) > Index {
-		ts.Tasks[Index].State = state
-		result = true
-	} else {
-		result = false
-	}
-	return
-}
-
-// return the first matching task else return empty result
-func (ts *Tasks) Find(state string) (task Task) {
-	for _, t := range ts.Tasks {
-		if t.State == state {
-			task = t
+	// Get the map task
+	mt.State = TASK_STATE_OF_UNINIT
+	for i := range c.mapTasks {
+		task := &c.mapTasks[i]
+		if task.State == TASK_STATE_OF_PENDING {
+			task.State = TASK_STATE_OF_RUNNING
+			task.StartTime = time.Now()
+			mt = *task
+			tskType = TASK_TYPE_OF_MAP
 			break
 		}
 	}
 
+	// return WAIT if still have tasks else return NONE
+	if mt.State == TASK_STATE_OF_UNINIT {
+		if c.unfinishedMapTasks > 0 {
+			tskType = TASK_TYPE_OF_WAIT
+		} else {
+			tskType = TASK_TYPE_OF_NONE
+		}
+	}
+
 	return
 }
 
-func (ts *Tasks) Empty() bool {
-	if len(ts.Tasks) == 0 {
-		return true
-	} else {
-		return false
+func (c *Coordinator) getReduceTask() (rt ReduceTask, tskType TaskType) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Reset timeout tasks
+	c.resetTasksOfTimeout(TASK_TYPE_OF_REDUCE)
+
+	// Get the map task
+	rt.State = TASK_STATE_OF_UNINIT
+	for i := range c.reduceTasks {
+		task := &c.reduceTasks[i]
+		if task.State == TASK_STATE_OF_PENDING {
+			task.State = TASK_STATE_OF_RUNNING
+			task.StartTime = time.Now()
+			// fmt.Printf("task.files: %v\n", task.IntermediateFiles)
+			rt = *task
+			tskType = TASK_TYPE_OF_REDUCE
+			break
+		}
 	}
+	// fmt.Printf("A rt: %v\n", rt)
+	// return wait or finished task status if task is empty
+	if rt.State == TASK_STATE_OF_UNINIT {
+		if c.unfinishedReduceTasks > 0 {
+			tskType = TASK_TYPE_OF_WAIT
+		} else {
+			// return Done if ReduceTasks are all finished
+			tskType = TASK_TYPE_OF_NONE
+		}
+	}
+	// fmt.Printf("B rt: %v\n", rt)
+	return
+}
+
+func (c *Coordinator) resetTasksOfTimeout(taskType int) {
+	switch taskType {
+	case TASK_TYPE_OF_MAP:
+		for i := range c.mapTasks {
+			task := &c.mapTasks[i]
+			if task.State == TASK_STATE_OF_RUNNING && time.Since(task.StartTime) > c.maxTimeOfTask {
+				task.State = TASK_STATE_OF_PENDING
+			}
+		}
+	case TASK_TYPE_OF_REDUCE:
+		for i := range c.reduceTasks {
+			task := &c.reduceTasks[i]
+			if task.State == TASK_STATE_OF_RUNNING && time.Since(task.StartTime) > c.maxTimeOfTask {
+				task.State = TASK_STATE_OF_PENDING
+			}
+		}
+	}
+}
+
+type TaskState int
+
+const (
+	TASK_STATE_OF_UNINIT = iota
+	TASK_STATE_OF_PENDING
+	TASK_STATE_OF_RUNNING
+	TASK_STATE_OF_FINISHED
+)
+
+type MapTask struct {
+	// Index     int
+	ID int
+	// State     string
+	State     TaskState
+	InputFile string
+	// OutputFiles []string
+	StartTime time.Time
+	Cost      time.Duration
+	NReduce   int
+}
+
+type ReduceTask struct {
+	// Index      int
+	ID int
+	// State      string
+	State             TaskState
+	IntermediateFiles []string
+	OutputFile        string
+	StartTime         time.Time
+	Cost              time.Duration
 }
 
 // Your code here -- RPC handlers for the worker to call.
 func (c *Coordinator) MyRPCHandler(args *Args, reply *Reply) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-	// fmt.Println("called MyRPCHandler()")
-
-	switch args.State {
-	case STATE_OF_ARGS.Finished():
-		switch args.Tsk.TskType {
-		case TASK_TYPE.Map():
-			c.Finished(args.Tsk)
-		case TASK_TYPE.Reduce():
-			c.Finished(args.Tsk)
+	// process args
+	switch args.TskType {
+	case TASK_TYPE_OF_NONE:
+		// worker just started, do Nothing
+	case TASK_TYPE_OF_MAP:
+		// jude task is finished
+		if c.isFinished(TASK_TYPE_OF_MAP, args.ID) {
+			// add intermediate Files to ReduceTasks
+			// fmt.Printf("MapTask Output: %v\n", args.Files)
+			for reduceID, file := range args.Files {
+				task := &c.reduceTasks[reduceID]
+				task.IntermediateFiles = append(task.IntermediateFiles, file)
+			}
+			// fmt.Printf("IntermediateFiles: %v\n", c.reduceTasks)
 		}
-		fallthrough
-	case STATE_OF_ARGS.RequestTask():
-		reply.State = STATE_OF_REPLY.TaskInfo()
-		if c.unfinishedMapTasks != 0 {
-			reply.Tsk = c.Get(TASK_TYPE.Map())
-		} else if c.unfinishedReduceTasks != 0 {
-			reply.Tsk = c.Get(TASK_TYPE.Reduce())
-		} else {
-			reply.State = STATE_OF_REPLY.Received()
+	case TASK_TYPE_OF_REDUCE:
+		// jude task is finished
+		if c.isFinished(TASK_TYPE_OF_REDUCE, args.ID) {
+			// nothing to do
 		}
 	}
 
+	// process reply
+	maptask, tskType := c.getMapTask()
+	if tskType == TASK_TYPE_OF_NONE {
+		// try to get ReduceTask if MapTasks are all finished
+		var reducetask ReduceTask
+		reducetask, tskType = c.getReduceTask()
+		if tskType != TASK_TYPE_OF_NONE {
+			// fmt.Printf("reduceTask: %v\n", reducetask)
+			reply.TskType = TASK_TYPE_OF_REDUCE
+			reply.ID = reducetask.ID
+			reply.Files = reducetask.IntermediateFiles
+			// fmt.Printf("task Type equal NONE?: %v\n", tskType == TASK_TYPE_OF_NONE)
+		}
+	} else if tskType != TASK_TYPE_OF_WAIT {
+		// try to get MapTask
+		reply.TskType = TASK_TYPE_OF_MAP
+		reply.ID = maptask.ID
+		// reply.Files = append(reply.Files, maptask.InputFile)
+		reply.Files = []string{maptask.InputFile}
+		reply.NReduce = maptask.NReduce
+	}
+
+	if tskType == TASK_TYPE_OF_NONE {
+		// fmt.Printf("tskType is None? %v\n", tskType == TASK_TYPE_OF_NONE)
+		// all tasks are finished
+		reply.TskType = TASK_TYPE_OF_NONE
+		// for _, task := range c.reduceTasks {
+		// 	fmt.Printf("%v\n", task.IntermediateFiles)
+		// }
+		// fmt.Printf("reply: %v\n", reply)
+	}
+
 	return nil
+}
+
+// set the status of the task to finished if the task is finished else Pendging
+func (c *Coordinator) isFinished(tskType TaskType, ID int) (result bool) {
+	switch tskType {
+	case TASK_TYPE_OF_MAP:
+		task := &c.mapTasks[ID]
+		if task.Cost = time.Since(task.StartTime); task.Cost <= c.maxTimeOfTask {
+			task.State = TASK_STATE_OF_FINISHED
+			c.unfinishedMapTasks--
+			result = true
+		} else {
+			task.State = TASK_STATE_OF_PENDING
+		}
+	case TASK_TYPE_OF_REDUCE:
+		task := &c.reduceTasks[ID]
+		if task.Cost = time.Since(task.StartTime); task.Cost <= c.maxTimeOfTask {
+			task.State = TASK_STATE_OF_FINISHED
+			c.unfinishedReduceTasks--
+			result = true
+		} else {
+			task.State = TASK_STATE_OF_PENDING
+		}
+	}
+
+	return
 }
 
 // an example RPC handler.
@@ -194,7 +254,6 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	ret := false
-	// ret := true
 
 	// Your code here.
 	// return true if all Tasks are done.
@@ -209,42 +268,33 @@ func (c *Coordinator) Done() bool {
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce Tasks to use.
-func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
+func MakeCoordinator(Files []string, nReduce int) *Coordinator {
+	c := Coordinator{
+		mapTasks:    make([]MapTask, len(Files)),
+		reduceTasks: make([]ReduceTask, nReduce),
+	}
 
 	// Your code here.
-	// c.mapTasks
-	// c.reduceTasks = make(Tasks)
 	// init Tasks
-	reduceID := 0
-	intermediate := ""
-	for i, filename := range files {
-		// init single map task
-		reduceID = ihash(filename) % nReduce
-		// reduceID = i
-		intermediate = fmt.Sprintf("mr-%d-%d.txt", i, reduceID)
-		c.mapTasks.Append(
-			Task{Index: i,
-				ID:         strconv.Itoa(i),
-				TskType:    TASK_TYPE.Map(),
-				State:      TASK_STATE.Pending(),
-				InputFile:  filename,
-				OutputFile: intermediate})
+	c.maxTimeOfTask = time.Second * 10
 
-		// init single reduce task
-		c.reduceTasks.Append(
-			Task{Index: i,
-				ID:         strconv.Itoa(reduceID),
-				TskType:    TASK_TYPE.Reduce(),
-				State:      TASK_STATE.Pending(),
-				InputFile:  intermediate,
-				OutputFile: fmt.Sprintf("mr-out-%d.txt", i)})
+	// init single map task
+	for i, filename := range Files {
+		c.mapTasks[i] = MapTask{ID: i,
+			State:     TASK_STATE_OF_PENDING,
+			InputFile: filename,
+			NReduce:   nReduce}
 
 		// count the number of Tasks
 		c.unfinishedMapTasks += 1
+	}
+
+	for i := 0; i < nReduce; i++ {
+		// create a single reduce task but not init at all
+		c.reduceTasks[i] = ReduceTask{ID: i, State: TASK_STATE_OF_PENDING}
+		// count the number of Tasks
 		c.unfinishedReduceTasks += 1
 	}
-	// fmt.Println(c)
 	// ----- endline of write code-----
 
 	c.server()
