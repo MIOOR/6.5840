@@ -228,7 +228,7 @@ $
 
 ### MakeCoordinator() and Done()
 
-![Lab1流程图-第 1 页.drawio](./MIT6.824%20Lab%201%20MapReduce/Lab1%E6%B5%81%E7%A8%8B%E5%9B%BE-%E7%AC%AC%201%20%E9%A1%B5.drawio.svg)
+![Lab1流程图-第 1 页](./MIT6.824%20Lab%201%20MapReduce/Lab1%E6%B5%81%E7%A8%8B%E5%9B%BE-%E7%AC%AC%201%20%E9%A1%B5.svg)
 
 ```go
 type Coordinator struct {
@@ -276,7 +276,7 @@ func (c *Coordinator) Done() bool {
 
 ### Woker()
 
-![Lab1流程图-第 3 页.drawio](./MIT6.824%20Lab%201%20MapReduce/Lab1%E6%B5%81%E7%A8%8B%E5%9B%BE-%E7%AC%AC%203%20%E9%A1%B5.drawio.svg)
+![Lab1流程图-第 3 页](./MIT6.824%20Lab%201%20MapReduce/Lab1%E6%B5%81%E7%A8%8B%E5%9B%BE-%E7%AC%AC%203%20%E9%A1%B5.svg)
 
 ```go
 // main/mrworker.go calls this function.
@@ -313,7 +313,7 @@ func Worker(mapf func(stri ng, string) []KeyValue,
 
 ### RPC
 
-![Lab1流程图-第 2 页.drawio](./MIT6.824%20Lab%201%20MapReduce/Lab1%E6%B5%81%E7%A8%8B%E5%9B%BE-%E7%AC%AC%202%20%E9%A1%B5.drawio.svg)
+![Lab1流程图-第 2 页](./MIT6.824%20Lab%201%20MapReduce/Lab1%E6%B5%81%E7%A8%8B%E5%9B%BE-%E7%AC%AC%202%20%E9%A1%B5.svg)
 
 ```go
 // RPC information type
