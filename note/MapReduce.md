@@ -18,7 +18,7 @@
 
 章节概要：
 
-![Content Of Sections](./MapReduce/Content Of Sections.svg)
+![Content_Of_Sections](./MapReduce/Content_Of_Sections.svg)
 
 ## 2 Programming Model
 
