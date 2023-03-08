@@ -8,5 +8,5 @@
 
 [RPC相关笔记](./note/RPC.md)
 
-[实验一要求及代码框架](./note/MIT6.824 Lab 1 MapReduce.md)
+[实验一要求及代码框架](./note/Lab1.md)
 
