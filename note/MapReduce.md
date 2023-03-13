@@ -60,7 +60,7 @@
 
 ##  3  Implementation
 
-运行环境为与交换的以太网[^4]连接在一起的大型商品pc集群
+运行环境为与交换的以太网[^4]连接在一起的大型商业pc集群
 
 ### Execution Overview
 
